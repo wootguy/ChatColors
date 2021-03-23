@@ -7,6 +7,8 @@ class PlayerState {
 	int color = -1; // classify value
 }
 
+bool g_disabled = false;
+
 // Will create a new state if the requested one does not exit
 PlayerState@ getPlayerState(CBasePlayer@ plr)
 {
@@ -34,11 +36,21 @@ void PluginInit()
 	g_Hooks.RegisterHook( Hooks::Player::ClientSay, @ClientSay );
 }
 
+void MapInit()
+{
+	g_disabled = false;
+}
+
 bool doCommand(CBasePlayer@ plr, const CCommand@ args, bool inConsole) {
 	bool isAdmin = g_PlayerFuncs.AdminLevel(plr) >= ADMIN_YES;
 	PlayerState@ state = getPlayerState(plr);
 	
 	if (args.ArgC() > 0 && args[0] == ".color" || args[0] == ".c") {
+		if (g_disabled) {
+			g_PlayerFuncs.SayTextAll(plr, "Chat colors are disabled on this map.");
+			return true;
+		}
+	
 		if (args.ArgC() >= 2) {
 			string color = args[1].ToLowercase();
 			
@@ -65,18 +77,28 @@ bool doCommand(CBasePlayer@ plr, const CCommand@ args, bool inConsole) {
 			}
 			g_PlayerFuncs.SayText(plr, "Your name color is now " + newColor);
 		} else {
-			g_PlayerFuncs.SayText(plr, "Usage: .color <red/green/blue/yellow>  OR  .c <r/g/b/y>");
+			g_PlayerFuncs.SayText(plr, "Usage: .color <red/green/blue/yellow/off>  OR  .c <r/g/b/y/o>");
 		}
 		
 		return true;
 	}
 	
+	if (g_disabled) {
+		return false;
+	}
+
 	if (args.ArgC() > 0 && state.color > 0) {
 		int oldClassify = plr.Classify();
+		if (oldClassify >= 16 && oldClassify <= 19) {
+			g_disabled = true;
+			g_PlayerFuncs.SayTextAll(plr, "Chat colors disabled. This map appears to use teams.");
+			return false;
+		}
+		
 		plr.SetClassification(state.color);
 		plr.SendScoreInfo();
 		plr.SetClassification(oldClassify);
-		g_Scheduler.SetTimeout("revert_scoreboard_color", 0.0f, EHandle(plr));
+		g_Scheduler.SetTimeout("revert_scoreboard_color", 0.5f, EHandle(plr));
 	}
 	
 	return false;
